@@ -3,6 +3,6 @@ mod utils;
 mod map;
 
 fn main() {
-    map::init();
+    let map = map::init();
 }
 
