@@ -6,3 +6,4 @@ pub const MIN_ZOOM:u32 = 0;
 pub const MAX_ZOOM:u32 = 11;
 
 pub const SOURCE:&str = "https://api.maptiler.com";
+pub const PARALLEL_DOWNLOAD_LIMIT:u16 = 10;

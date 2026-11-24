@@ -4,6 +4,10 @@ use crate::config::*;
 use crate::utils;
 use crossterm::terminal::window_size;
 use std::env;
+use downloader::Download;
+use downloader::downloader::Builder;
+use std::time::Duration;
+use std::path::Path;
 
 pub fn init() {
     let map = Map::new();
@@ -77,11 +81,25 @@ impl Map {
 
     fn fetch_visible_tiles(&self, visible_tiles: Vec<VectorTile>) {
         let key = env::var("MAPTILER_API_KEY").unwrap();
+
+        let mut tiles = vec!();
         for tile in visible_tiles {
             let VectorTile{x, y} = tile;
             let url = format!("{SOURCE}/tiles/countries/{}/{x}/{y}.pbf?key={key}", self.zoom);
             println!("{}", url);
+            let file = Download::new(&url).file_name(Path::new(&format!("{x}-{y}.pbf")));
+            tiles.push(file);
         }
+
+        let dl_dir = utils::create_and_get_dl_dir(self.zoom);
+        let mut dl = Builder::default()
+            .connect_timeout(Duration::from_secs(4))
+            .download_folder(&dl_dir)
+            .parallel_requests(PARALLEL_DOWNLOAD_LIMIT)
+            .build().unwrap();
+
+        // TODO: later check status of individual files and if fails, try doing again for n times
+        let _ = dl.download(&tiles);
     }
 }
 
