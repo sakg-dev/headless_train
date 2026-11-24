@@ -86,7 +86,6 @@ impl Map {
         for tile in visible_tiles {
             let VectorTile{x, y} = tile;
             let url = format!("{SOURCE}/tiles/countries/{}/{x}/{y}.pbf?key={key}", self.zoom);
-            println!("{}", url);
             let file = Download::new(&url).file_name(Path::new(&format!("{x}-{y}.pbf")));
             tiles.push(file);
         }
