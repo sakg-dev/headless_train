@@ -1,5 +1,3 @@
-// We are supporting only base zooms not fractional zooms
-
 use crate::config::*;
 use crate::utils;
 use crossterm::terminal::window_size;
@@ -7,12 +5,17 @@ use std::env;
 use downloader::Download;
 use downloader::downloader::Builder;
 use std::time::Duration;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+// use pbf::{ProtoRead, ProtoWrite, Protobuf, Field, Type}; // TODO: use other b4 this
+use open_vector_tile::{VectorTile};
 
 pub fn init() {
     let map = Map::new();
     let visible_tiles = map.visible_tiles();
-    map.fetch_visible_tiles(visible_tiles);
+    let dl_dir = map.fetch_visible_tiles(visible_tiles);
+    map.read_tiles(dl_dir);
+    // Now once we have visible tiles, render them, by firstly getting them in order then loop it
+    // and draw in ascii somehow smh
 }
 
 pub struct Map {
@@ -22,12 +25,13 @@ pub struct Map {
 }
 
 #[derive(Debug)]
-struct VectorTile {
+struct Tile {
     x: u32,
     y: u32
 }
 
 impl Map {
+    // We are supporting only base zooms not fractional zooms
     fn new() -> Self {
         Self {
             zoom: INITIAL_ZOOM,
@@ -36,7 +40,7 @@ impl Map {
         }
     }
 
-    fn visible_tiles(&self) -> Vec<VectorTile> {
+    fn visible_tiles(&self) -> Vec<Tile> {
         // At z=0, there is only 1 tile and we will show it in original size, for rest, we have neighbours
 
         let center_tile_pos = utils::ll_to_tile_pos(self.lon, self.lat, self.zoom);
@@ -65,11 +69,11 @@ impl Map {
         let right_tile = (center_tile_pos.x as u32) + tiles_in_right;
     
         // Now tiles inside these tiles are visible tiles?!?!!
-        let mut visible_tiles: Vec<VectorTile> = vec!();
+        let mut visible_tiles: Vec<Tile> = vec!();
         for y in top_tile..(bottom_tile + 1) {
             for x in left_tile..(right_tile + 1) {
                 // println!("{x}, {y}");
-                let visible_tile = VectorTile {
+                let visible_tile = Tile {
                     x: x,
                     y: y
                 };
@@ -79,18 +83,20 @@ impl Map {
         visible_tiles
     }
 
-    fn fetch_visible_tiles(&self, visible_tiles: Vec<VectorTile>) {
+    fn fetch_visible_tiles(&self, visible_tiles: Vec<Tile>) -> PathBuf {
         let key = env::var("MAPTILER_API_KEY").unwrap();
 
         let mut tiles = vec!();
         for tile in visible_tiles {
-            let VectorTile{x, y} = tile;
+            let Tile{x, y} = tile;
             let url = format!("{SOURCE}/tiles/countries/{}/{x}/{y}.pbf?key={key}", self.zoom);
             let file = Download::new(&url).file_name(Path::new(&format!("{x}-{y}.pbf")));
             tiles.push(file);
         }
 
         let dl_dir = utils::create_and_get_dl_dir(self.zoom);
+        // TODO: check when dir exists, why is it faster, is it bcz the same file is already there
+        // or what?
         let mut dl = Builder::default()
             .connect_timeout(Duration::from_secs(4))
             .download_folder(&dl_dir)
@@ -99,6 +105,25 @@ impl Map {
 
         // TODO: later check status of individual files and if fails, try doing again for n times
         let _ = dl.download(&tiles);
+        dl_dir
+    }
+
+    fn read_tiles(&self, dl_dir: PathBuf) {
+        // let files = utils::files_in_dir(dl_dir).unwrap();
+        // println!("{:?}", files);
+
+        // for file in files {
+        //     let mut reader = PbfReader::from_path(file).unwrap();
+        //     reader.read(|header, element| {
+
+        //     }).unwrap();
+        // }
+
+        let file = "/home/sakg/Downloads/0.pbf";
+        let mut buf:Vec<u8> = vec!();
+        utils::read_file(&mut buf, file);
+        println!("{:?}", buf);
+        let mut tile = VectorTile::new(buf, None);
     }
 }
 

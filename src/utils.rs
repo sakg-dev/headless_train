@@ -1,6 +1,7 @@
 use std::f32::consts::PI;
 use std::path::PathBuf;
 use std::{fs, env};
+use std::io::Read;
 
 pub fn create_and_get_dl_dir(zoom:u32) -> PathBuf {
     // rn, we create a folder everytime and will delete once programs terminates TODO: <-
@@ -20,6 +21,20 @@ pub fn create_and_get_dl_dir(zoom:u32) -> PathBuf {
 
     dl_dir
 }
+
+pub fn files_in_dir(dir: PathBuf) -> Option<Vec<PathBuf>> {
+    if dir.is_dir() {
+        let files = fs::read_dir(dir).unwrap().into_iter().map(|f| f.unwrap().path()).collect::<Vec<_>>();
+        Some(files)
+    } else {
+        None
+    }
+}
+
+pub fn read_file(mut buf: &mut Vec<u8>, file_path: &str) {
+    let mut file = fs::File::open(file_path).unwrap();
+    file.read_to_end(&mut buf);
+} 
 
 #[derive(Debug)]
 pub struct TilePos {
