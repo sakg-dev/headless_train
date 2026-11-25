@@ -6,8 +6,8 @@ use downloader::Download;
 use downloader::downloader::Builder;
 use std::time::Duration;
 use std::path::{Path, PathBuf};
-// use pbf::{ProtoRead, ProtoWrite, Protobuf, Field, Type}; // TODO: use other b4 this
-use open_vector_tile::{VectorTile};
+use mvt_reader::{Reader, error::{ParserError}};
+
 
 pub fn init() {
     let map = Map::new();
@@ -25,7 +25,7 @@ pub struct Map {
 }
 
 #[derive(Debug)]
-struct Tile {
+struct VectorTile {
     x: u32,
     y: u32
 }
@@ -40,7 +40,7 @@ impl Map {
         }
     }
 
-    fn visible_tiles(&self) -> Vec<Tile> {
+    fn visible_tiles(&self) -> Vec<VectorTile> {
         // At z=0, there is only 1 tile and we will show it in original size, for rest, we have neighbours
 
         let center_tile_pos = utils::ll_to_tile_pos(self.lon, self.lat, self.zoom);
@@ -69,11 +69,11 @@ impl Map {
         let right_tile = (center_tile_pos.x as u32) + tiles_in_right;
     
         // Now tiles inside these tiles are visible tiles?!?!!
-        let mut visible_tiles: Vec<Tile> = vec!();
+        let mut visible_tiles: Vec<VectorTile> = vec!();
         for y in top_tile..(bottom_tile + 1) {
             for x in left_tile..(right_tile + 1) {
                 // println!("{x}, {y}");
-                let visible_tile = Tile {
+                let visible_tile = VectorTile {
                     x: x,
                     y: y
                 };
@@ -83,12 +83,12 @@ impl Map {
         visible_tiles
     }
 
-    fn fetch_visible_tiles(&self, visible_tiles: Vec<Tile>) -> PathBuf {
+    fn fetch_visible_tiles(&self, visible_tiles: Vec<VectorTile>) -> PathBuf {
         let key = env::var("MAPTILER_API_KEY").unwrap();
 
         let mut tiles = vec!();
         for tile in visible_tiles {
-            let Tile{x, y} = tile;
+            let VectorTile{x, y} = tile;
             let url = format!("{SOURCE}/tiles/countries/{}/{x}/{y}.pbf?key={key}", self.zoom);
             let file = Download::new(&url).file_name(Path::new(&format!("{x}-{y}.pbf")));
             tiles.push(file);
@@ -113,17 +113,16 @@ impl Map {
         // println!("{:?}", files);
 
         // for file in files {
-        //     let mut reader = PbfReader::from_path(file).unwrap();
-        //     reader.read(|header, element| {
-
-        //     }).unwrap();
         // }
 
-        let file = "/home/sakg/Downloads/0.pbf";
+        let file = "/home/sakg/Downloads/1.pbf";
         let mut buf:Vec<u8> = vec!();
         utils::read_file(&mut buf, file);
-        println!("{:?}", buf);
-        let mut tile = VectorTile::new(buf, None);
+
+        let reader = Reader::new(buf).unwrap();
+        // println!("{:?}", reader.get_layer_names().unwrap());
+        // println!("{:?}", reader.get_layer_metadata().unwrap());
+        // println!("{:?}", reader.get_features(0).unwrap()[50].properties.as_ref().unwrap());
     }
 }
 
