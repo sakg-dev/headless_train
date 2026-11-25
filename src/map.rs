@@ -1,18 +1,26 @@
 use crate::config::*;
 use crate::utils;
-use crossterm::terminal::window_size;
+use crossterm::{
+    ExecutableCommand, QueueableCommand,
+    terminal, cursor, style::{self, Stylize}
+};
 use downloader::{Download, downloader::Builder};
-use std::env;
-use std::time::Duration;
-use std::path::{Path, PathBuf};
-use mvt_reader::{Reader, error::{ParserError}, feature::Feature};
+use std::{
+    time::{self, Duration},
+    io::{self, Write},
+    path::{Path, PathBuf},
+    env,
+    thread,
+};
+use mvt_reader::{Reader, error::{ParserError}, feature::{Feature, Value}};
 
 pub fn init() {
     let map = Map::new();
-    let visible_tiles = map.visible_tiles();
+    let center_tile_pos = map.get_center_tile_pos();
+    let visible_tiles = map.visible_tiles(&center_tile_pos);
     let dl_dir = map.download_visible_tiles(&visible_tiles);
     let tiles_to_render = map.read_tiles(dl_dir, visible_tiles); // getting features and pos of each visible tile
-    // println!("{:?}", tiles_to_render);
+    map.render_tiles(tiles_to_render, &center_tile_pos);
 }
 
 pub struct Map {
@@ -33,6 +41,12 @@ pub struct TileGridPos {
     pub y: u32
 }
 
+#[derive(Debug)]
+pub struct TileGridAccuratePos { // Tile Grid Pos accurately -- with fraction
+    pub x: f32,
+    pub y: f32
+}
+
 impl Map {
     // We are supporting only base zooms not fractional zooms
     fn new() -> Self {
@@ -43,12 +57,14 @@ impl Map {
         }
     }
 
-    fn visible_tiles(&self) -> Vec<TileGridPos> {
+    fn get_center_tile_pos(&self) -> TileGridAccuratePos {
+        utils::ll_to_tile_pos(self.lon, self.lat, self.zoom)
+    }
+
+    fn visible_tiles(&self, center_tile_pos: &TileGridAccuratePos) -> Vec<TileGridPos> {
         // At z=0, there is only 1 tile and we will show it in original size, for rest, we have neighbours
 
-        let center_tile_pos = utils::ll_to_tile_pos(self.lon, self.lat, self.zoom);
-
-        let window_size = window_size().unwrap();
+        let window_size = terminal::window_size().unwrap();
      
         // PIXEL_SCALE / (1 / padding_in_fraction) = Left/Top padding in pixel
         let dx = PIXEL_SCALE as f32 / (1.0 / (center_tile_pos.x - (center_tile_pos.x as u32) as f32)); 
@@ -112,7 +128,7 @@ impl Map {
     }
 
 
-    fn read_tiles(&self, dl_dir: PathBuf, visible_tiles_pos: Vec<TileGridPos>) -> Vec<Tile>{
+    fn read_tiles(&self, dl_dir: PathBuf, visible_tiles_pos: Vec<TileGridPos>) -> Vec<Tile> {
         let files = utils::files_in_dir(dl_dir).unwrap();
         // there might be tiles from prev download, bt we need current only
         let files = utils::filter_visible_tiles_file(files, visible_tiles_pos); 
@@ -147,6 +163,40 @@ impl Map {
             }
         }
         tiles
+    }
+
+    fn render_tiles(&self, tiles: Vec<Tile>, center_tile_pos: &TileGridAccuratePos) {
+//        println!("{:?}", tiles[6].features[8].geometry);
+//        for (p_key, p_val) in tiles[6].features[8].properties.as_ref().unwrap() {
+//            if !p_key.starts_with("name") {
+//                println!("{}: {:?}", p_key, p_val);
+//            }
+//        }
+        
+//        let mut stdout = io::stdout();
+//        terminal::enable_raw_mode();
+//
+//        stdout.queue(terminal::Clear(terminal::ClearType::All)).unwrap();
+
+        for tile in tiles {
+            // println!("{:?}", tile);
+            let Tile {pos, features} = tile;
+
+        }
+
+//        for y in 0..40 {
+//            for x in 0..150 {
+//                if (y == 0 || y == 40 - 1) || (x == 0 || x == 150 - 1) {
+//                    stdout
+//                      .queue(cursor::MoveTo(x,y)).unwrap()
+//                      .queue(style::PrintStyledContent("#".blue())).unwrap();
+//                }
+//            }
+//        }
+
+//        stdout.flush().unwrap();
+//        thread::sleep(time::Duration::from_secs(10));
+//        terminal::disable_raw_mode();
     }
 }
 

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::{fs, env};
 use std::io::Read;
 
-use crate::map::TileGridPos;
+use crate::map::{TileGridPos, TileGridAccuratePos};
 
 pub fn create_and_get_dl_dir(zoom:u32) -> PathBuf {
     // rn, we create a folder everytime and will delete once programs terminates TODO: <-
@@ -58,23 +58,15 @@ pub fn read_file(mut buf: &mut Vec<u8>, file_path: &PathBuf) {
     file.read_to_end(&mut buf);
 } 
 
-#[derive(Debug)]
-pub struct TilePos {
-    pub x: f32,
-    pub y: f32,
-    pub z: u32
-}
-
-pub fn ll_to_tile_pos(lon: f32, lat: f32, zoom: u32) -> TilePos {
+pub fn ll_to_tile_pos(lon: f32, lat: f32, zoom: u32) -> TileGridAccuratePos {
     // https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
     let n = 2_i32.pow(zoom) as f32; // n*n is number of tiles
     // println!("{}", n);
     let x_tile = n * ((lon + 180.0) / 360.0);
     let y_tile = n * (1.0 - ((lat.tan() + (1.0/lat.cos())).ln() / PI)) / 2.0;
-    TilePos {
+    TileGridAccuratePos {
         x: x_tile,
-        y: y_tile,
-        z: zoom
+        y: y_tile
     }
 }
 
