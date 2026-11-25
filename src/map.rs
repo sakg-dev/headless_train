@@ -1,21 +1,18 @@
 use crate::config::*;
 use crate::utils;
 use crossterm::terminal::window_size;
+use downloader::{Download, downloader::Builder};
 use std::env;
-use downloader::Download;
-use downloader::downloader::Builder;
 use std::time::Duration;
 use std::path::{Path, PathBuf};
-use mvt_reader::{Reader, error::{ParserError}};
-
+use mvt_reader::{Reader, error::{ParserError}, feature::Feature};
 
 pub fn init() {
     let map = Map::new();
     let visible_tiles = map.visible_tiles();
-    let dl_dir = map.fetch_visible_tiles(visible_tiles);
-    map.read_tiles(dl_dir);
-    // Now once we have visible tiles, render them, by firstly getting them in order then loop it
-    // and draw in ascii somehow smh
+    let dl_dir = map.download_visible_tiles(&visible_tiles);
+    let tiles_to_render = map.read_tiles(dl_dir, visible_tiles); // getting features and pos of each visible tile
+    // println!("{:?}", tiles_to_render);
 }
 
 pub struct Map {
@@ -25,9 +22,15 @@ pub struct Map {
 }
 
 #[derive(Debug)]
-struct VectorTile {
-    x: u32,
-    y: u32
+struct Tile {
+    pos: TileGridPos,
+    features: Vec<Feature>
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TileGridPos {
+    pub x: u32,
+    pub y: u32
 }
 
 impl Map {
@@ -40,7 +43,7 @@ impl Map {
         }
     }
 
-    fn visible_tiles(&self) -> Vec<VectorTile> {
+    fn visible_tiles(&self) -> Vec<TileGridPos> {
         // At z=0, there is only 1 tile and we will show it in original size, for rest, we have neighbours
 
         let center_tile_pos = utils::ll_to_tile_pos(self.lon, self.lat, self.zoom);
@@ -69,11 +72,11 @@ impl Map {
         let right_tile = (center_tile_pos.x as u32) + tiles_in_right;
     
         // Now tiles inside these tiles are visible tiles?!?!!
-        let mut visible_tiles: Vec<VectorTile> = vec!();
+        let mut visible_tiles: Vec<TileGridPos> = vec!();
         for y in top_tile..(bottom_tile + 1) {
             for x in left_tile..(right_tile + 1) {
                 // println!("{x}, {y}");
-                let visible_tile = VectorTile {
+                let visible_tile = TileGridPos {
                     x: x,
                     y: y
                 };
@@ -83,12 +86,12 @@ impl Map {
         visible_tiles
     }
 
-    fn fetch_visible_tiles(&self, visible_tiles: Vec<VectorTile>) -> PathBuf {
+    fn download_visible_tiles(&self, visible_tiles: &Vec<TileGridPos>) -> PathBuf {
         let key = env::var("MAPTILER_API_KEY").unwrap();
 
         let mut tiles = vec!();
         for tile in visible_tiles {
-            let VectorTile{x, y} = tile;
+            let TileGridPos{x, y} = tile;
             let url = format!("{SOURCE}/tiles/countries/{}/{x}/{y}.pbf?key={key}", self.zoom);
             let file = Download::new(&url).file_name(Path::new(&format!("{x}-{y}.pbf")));
             tiles.push(file);
@@ -108,21 +111,42 @@ impl Map {
         dl_dir
     }
 
-    fn read_tiles(&self, dl_dir: PathBuf) {
-        // let files = utils::files_in_dir(dl_dir).unwrap();
-        // println!("{:?}", files);
 
-        // for file in files {
-        // }
+    fn read_tiles(&self, dl_dir: PathBuf, visible_tiles_pos: Vec<TileGridPos>) -> Vec<Tile>{
+        let files = utils::files_in_dir(dl_dir).unwrap();
+        // there might be tiles from prev download, bt we need current only
+        let files = utils::filter_visible_tiles_file(files, visible_tiles_pos); 
 
-        let file = "/home/sakg/Downloads/1.pbf";
-        let mut buf:Vec<u8> = vec!();
-        utils::read_file(&mut buf, file);
+        let mut tiles:Vec<Tile> = vec!();
 
-        let reader = Reader::new(buf).unwrap();
-        // println!("{:?}", reader.get_layer_names().unwrap());
-        // println!("{:?}", reader.get_layer_metadata().unwrap());
-        // println!("{:?}", reader.get_features(0).unwrap()[50].properties.as_ref().unwrap());
+        for file in files {
+            let mut buf:Vec<u8> = vec!();
+            utils::read_file(&mut buf, &file);
+
+            let reader = Reader::new(buf).unwrap();
+            let layer_names = reader.get_layer_names().unwrap();
+
+            let administrative_idx = layer_names.iter().position(|l| l.as_str()=="administrative");
+
+            if let Some(idx) = administrative_idx {
+                // println!("{idx}");
+                // println!("{:?}", reader.get_layer_metadata().unwrap());
+                let pos = utils::get_pos_from_file_path(&file);
+                let pos = TileGridPos {
+                    x: pos.x,
+                    y: pos.y
+                };
+                let features = reader.get_features(idx).unwrap();
+                let tile = Tile {
+                    pos: pos,
+                    features: features
+                };
+                tiles.push(tile);
+            } else {
+                // TODO: todo!("Administrative layer doesn't exist in file: {}", file.into_string().unwrap());
+            }
+        }
+        tiles
     }
 }
 
