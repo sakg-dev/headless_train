@@ -36,7 +36,7 @@ pub fn get_pos_from_file_path(file_path: &PathBuf) -> TileGridPos {
     }
 }
 
-pub fn filter_visible_tiles_file(files: Vec<PathBuf>, visible_tiles_pos: Vec<TileGridPos>) -> Vec<PathBuf> {
+pub fn filter_visible_tile_files(files: Vec<PathBuf>, visible_tiles_pos: Vec<TileGridPos>) -> Vec<PathBuf> {
     let visible_tiles_file = files.into_iter().filter(|f| {
         let pos = get_pos_from_file_path(&f);
         visible_tiles_pos.contains(&pos)
@@ -61,7 +61,6 @@ pub fn read_file(mut buf: &mut Vec<u8>, file_path: &PathBuf) {
 pub fn ll_to_tile_pos(lon: f32, lat: f32, zoom: u32) -> TileGridAccuratePos {
     // https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
     let n = 2_i32.pow(zoom) as f32; // n*n is number of tiles
-    // println!("{}", n);
     let x_tile = n * ((lon + 180.0) / 360.0);
     let y_tile = n * (1.0 - ((lat.tan() + (1.0/lat.cos())).ln() / PI)) / 2.0;
     TileGridAccuratePos {

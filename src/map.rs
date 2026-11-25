@@ -16,11 +16,12 @@ use mvt_reader::{Reader, error::{ParserError}, feature::{Feature, Value}};
 
 pub fn init() {
     let map = Map::new();
+    let window_size = terminal::window_size().unwrap();
     let center_tile_pos = map.get_center_tile_pos();
-    let visible_tiles = map.visible_tiles(&center_tile_pos);
-    let dl_dir = map.download_visible_tiles(&visible_tiles);
-    let tiles_to_render = map.read_tiles(dl_dir, visible_tiles); // getting features and pos of each visible tile
-    map.render_tiles(tiles_to_render, &center_tile_pos);
+    let visible_tile_positions = map.get_visible_tile_positions(&center_tile_pos, &window_size);
+    let dl_dir = map.download_visible_tile_files(&visible_tile_positions);
+    let visible_tiles = map.read_visible_tile_files(dl_dir, visible_tile_positions);
+    map.render_tiles(visible_tiles, &center_tile_pos, &window_size);
 }
 
 pub struct Map {
@@ -61,83 +62,86 @@ impl Map {
         utils::ll_to_tile_pos(self.lon, self.lat, self.zoom)
     }
 
-    fn visible_tiles(&self, center_tile_pos: &TileGridAccuratePos) -> Vec<TileGridPos> {
-        // At z=0, there is only 1 tile and we will show it in original size, for rest, we have neighbours
+    // based on center tile position and window size, finding out visible tiles
+    fn get_visible_tile_positions(&self, center_tile_pos: &TileGridAccuratePos, window_size: &terminal::WindowSize) -> Vec<TileGridPos> {
+        // TODO: Its panicking at lower zoom: 
 
-        let window_size = terminal::window_size().unwrap();
-     
-        // PIXEL_SCALE / (1 / padding_in_fraction) = Left/Top padding in pixel
-        let dx = PIXEL_SCALE as f32 / (1.0 / (center_tile_pos.x - (center_tile_pos.x as u32) as f32)); 
-        let dy = PIXEL_SCALE as f32 / (1.0 / (center_tile_pos.y - (center_tile_pos.y as u32) as f32)); 
-    
-        // leftover space in pixel when removed the main tile space
-        let top_l_space_in_pixel = (window_size.height/2) as f32 - dy;
-        let bottom_l_space_in_pixel = (window_size.height/2) as f32 - (PIXEL_SCALE as f32 - dy);
-        let left_l_space_in_pixel = (window_size.width/2) as f32 - dx;
-        let right_l_space_in_pixel = (window_size.width/2) as f32 - (PIXEL_SCALE as f32 - dx);
-    
+        let pixel_scale = PIXEL_SCALE as f32;
+        let half_window_width  = (window_size.width / 2) as f32;
+        let half_window_height = (window_size.height / 2) as f32;
+
+        // PIXEL_SCALE * padding_in_fraction = padding in pixels
+        let l_padding = pixel_scale * (center_tile_pos.x - center_tile_pos.x.trunc());
+        let t_padding = pixel_scale * (center_tile_pos.y - center_tile_pos.y.trunc());
+
+        // leftover space in pixel when removed the center tile
+        let top_l_space_in_pixel    = half_window_height - t_padding;
+        let bottom_l_space_in_pixel = half_window_height - (pixel_scale - t_padding);
+        let left_l_space_in_pixel   = half_window_width - l_padding;
+        let right_l_space_in_pixel  = half_window_width - (pixel_scale - l_padding);
+
         // find how many tiles can fit in the leftover space
-        let tiles_in_top =  ((top_l_space_in_pixel / PIXEL_SCALE as f32)+1.0) as u32;
-        let tiles_in_bottom =  ((bottom_l_space_in_pixel / PIXEL_SCALE as f32)+1.0) as u32;
-        let tiles_in_left =  ((left_l_space_in_pixel / PIXEL_SCALE as f32)+1.0) as u32;
-        let tiles_in_right =  ((right_l_space_in_pixel / PIXEL_SCALE as f32)+1.0) as u32;
-    
-        let top_tile = (center_tile_pos.y as u32) - tiles_in_top;
-        let bottom_tile = (center_tile_pos.y as u32) + tiles_in_bottom;
-        let left_tile = (center_tile_pos.x as u32) - tiles_in_left;
-        let right_tile = (center_tile_pos.x as u32) + tiles_in_right;
-    
-        // Now tiles inside these tiles are visible tiles?!?!!
-        let mut visible_tiles: Vec<TileGridPos> = vec!();
-        for y in top_tile..(bottom_tile + 1) {
-            for x in left_tile..(right_tile + 1) {
-                // println!("{x}, {y}");
-                let visible_tile = TileGridPos {
+        let tiles_in_top    =  (top_l_space_in_pixel / pixel_scale).ceil();
+        let tiles_in_bottom =  (bottom_l_space_in_pixel / pixel_scale).ceil();
+        let tiles_in_left   =  (left_l_space_in_pixel / pixel_scale).ceil();
+        let tiles_in_right  =  (right_l_space_in_pixel / pixel_scale).ceil();
+
+        // find the {direction}-most tile aka min-{x|y} and max-{x|y}
+        let min_y = (center_tile_pos.y - tiles_in_top) as u32;
+        let max_y = (center_tile_pos.y + tiles_in_bottom) as u32;
+        let min_x = (center_tile_pos.x - tiles_in_left) as u32;
+        let max_x = (center_tile_pos.x + tiles_in_right) as u32;
+
+        // tiles inside min-max are visible tiles
+        let mut visible_tile_positions: Vec<TileGridPos> = vec!();
+        for y in min_y..(max_y + 1) {
+            for x in min_x..(max_x + 1) {
+                let visible_tile_position = TileGridPos {
                     x: x,
                     y: y
                 };
-                visible_tiles.push(visible_tile);
+                visible_tile_positions.push(visible_tile_position);
             }
         }
-        visible_tiles
+        visible_tile_positions
     }
 
-    fn download_visible_tiles(&self, visible_tiles: &Vec<TileGridPos>) -> PathBuf {
+    // download the visible tiles and return download directory
+    fn download_visible_tile_files(&self, visible_tile_positions: &Vec<TileGridPos>) -> PathBuf {
         let key = env::var("MAPTILER_API_KEY").unwrap();
+        let z = self.zoom;
 
-        let mut tiles = vec!();
-        for tile in visible_tiles {
-            let TileGridPos{x, y} = tile;
-            let url = format!("{SOURCE}/tiles/countries/{}/{x}/{y}.pbf?key={key}", self.zoom);
+        let mut visible_tile_files = vec!();
+        for visible_tile_position in visible_tile_positions {
+            let TileGridPos{x, y} = visible_tile_position;
+            let url = format!("{SOURCE}/tiles/countries/{z}/{x}/{y}.pbf?key={key}");
             let file = Download::new(&url).file_name(Path::new(&format!("{x}-{y}.pbf")));
-            tiles.push(file);
+            visible_tile_files.push(file);
         }
 
         let dl_dir = utils::create_and_get_dl_dir(self.zoom);
-        // TODO: check when dir exists, why is it faster, is it bcz the same file is already there
-        // or what?
+        // TODO: check when dir exists, why is it faster, is it bcz the same file is already there?
         let mut dl = Builder::default()
-            .connect_timeout(Duration::from_secs(4))
+            .connect_timeout(Duration::from_secs(DOWNLOAD_TIMEOUT))
             .download_folder(&dl_dir)
             .parallel_requests(PARALLEL_DOWNLOAD_LIMIT)
             .build().unwrap();
 
+        let _ = dl.download(&visible_tile_files);
         // TODO: later check status of individual files and if fails, try doing again for n times
-        let _ = dl.download(&tiles);
         dl_dir
     }
 
-
-    fn read_tiles(&self, dl_dir: PathBuf, visible_tiles_pos: Vec<TileGridPos>) -> Vec<Tile> {
-        let files = utils::files_in_dir(dl_dir).unwrap();
+    // reads all tile files in zoom dir, filter current tiles and output position and features of each
+    fn read_visible_tile_files(&self, dl_dir: PathBuf, visible_tile_positions: Vec<TileGridPos>) -> Vec<Tile> {
+        let all_tile_files = utils::files_in_dir(dl_dir).unwrap();
         // there might be tiles from prev download, bt we need current only
-        let files = utils::filter_visible_tiles_file(files, visible_tiles_pos); 
+        let visible_tile_files = utils::filter_visible_tile_files(all_tile_files, visible_tile_positions); 
 
-        let mut tiles:Vec<Tile> = vec!();
-
-        for file in files {
+        let mut visible_tiles:Vec<Tile> = vec!();
+        for visible_tile_file in visible_tile_files {
             let mut buf:Vec<u8> = vec!();
-            utils::read_file(&mut buf, &file);
+            utils::read_file(&mut buf, &visible_tile_file);
 
             let reader = Reader::new(buf).unwrap();
             let layer_names = reader.get_layer_names().unwrap();
@@ -145,27 +149,22 @@ impl Map {
             let administrative_idx = layer_names.iter().position(|l| l.as_str()=="administrative");
 
             if let Some(idx) = administrative_idx {
-                // println!("{idx}");
                 // println!("{:?}", reader.get_layer_metadata().unwrap());
-                let pos = utils::get_pos_from_file_path(&file);
-                let pos = TileGridPos {
-                    x: pos.x,
-                    y: pos.y
-                };
+                let pos = utils::get_pos_from_file_path(&visible_tile_file);
                 let features = reader.get_features(idx).unwrap();
-                let tile = Tile {
+                let visible_tile = Tile {
                     pos: pos,
                     features: features
                 };
-                tiles.push(tile);
+                visible_tiles.push(visible_tile);
             } else {
                 // TODO: todo!("Administrative layer doesn't exist in file: {}", file.into_string().unwrap());
             }
         }
-        tiles
+        visible_tiles
     }
 
-    fn render_tiles(&self, tiles: Vec<Tile>, center_tile_pos: &TileGridAccuratePos) {
+    fn render_tiles(&self, visible_tiles: Vec<Tile>, center_tile_pos: &TileGridAccuratePos, window_size: &terminal::WindowSize) {
 //        println!("{:?}", tiles[6].features[8].geometry);
 //        for (p_key, p_val) in tiles[6].features[8].properties.as_ref().unwrap() {
 //            if !p_key.starts_with("name") {
@@ -178,10 +177,11 @@ impl Map {
 //
 //        stdout.queue(terminal::Clear(terminal::ClearType::All)).unwrap();
 
-        for tile in tiles {
-            // println!("{:?}", tile);
-            let Tile {pos, features} = tile;
-
+//        let p_left = 
+        for visible_tile in visible_tiles {
+            let Tile {pos, features} = visible_tile;
+            // which part to show
+            // where in the screen
         }
 
 //        for y in 0..40 {
