@@ -192,28 +192,43 @@ impl Map {
             x: center_tile_pos.x as u32,
             y: center_tile_pos.y as u32
         };
+        let half_width = (window_size.width / 2) as f32;
+        let half_height = (window_size.height / 2) as f32;
+
         for visible_tile in visible_tiles {
             let Tile {pos, features} = visible_tile;
             // # which part to show
-            // println!("{:?}", pos);
-
             // top and left are negative | right and bottom are positive
             let relative_pos = TileGridRelativePos {
                 x: (pos.x as i32) - (non_acc_center_tile_pos.x as i32),
                 y: (pos.y as i32) - (non_acc_center_tile_pos.y as i32)
             };
-            // println!("{:?}", relative_pos);
             if relative_pos.x == 0 && relative_pos.y == 0 {
                 // println!("center_tile which is full");
-            } else {
-                let paddings = utils::get_paddings(&relative_pos, center_tile_pos, PIXEL_SCALE);
-                // total space between the center and that tile(with direction)
-                let space_x = (relative_pos.x.unsigned_abs() * PIXEL_SCALE) as f32 + paddings.x;
-                let space_y = (relative_pos.y.unsigned_abs() * PIXEL_SCALE) as f32 + paddings.y;
-                println!("{:?}", space_x);
-            }
 
-            // where in the screen
+            } else {
+                let center_paddings = utils::get_paddings(&relative_pos, center_tile_pos, PIXEL_SCALE);
+                // total space between the center and that tile(with direction)
+                let space_x = (relative_pos.x.unsigned_abs() * PIXEL_SCALE) as f32 + center_paddings.x;
+                let space_y = (relative_pos.y.unsigned_abs() * PIXEL_SCALE) as f32 + center_paddings.y;
+
+                // if negative, means fraction and if positive, means full
+                let diff_x = half_width - space_x;
+                let diff_y = half_height - space_y;
+
+                if diff_x >= 0.0 {
+                    // full x
+                } else {
+                    let fraction_x = diff_x + PIXEL_SCALE as f32;
+                }
+
+                if diff_y >= 0.0 {
+                    // full y
+                } else {
+                    let fraction_y = diff_y + PIXEL_SCALE as f32;
+                }
+            }
+            // # where in the screen
         }
 
 //        for y in 0..40 {
