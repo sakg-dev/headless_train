@@ -13,6 +13,7 @@ use std::{
     thread,
 };
 use mvt_reader::{Reader, error::{ParserError}, feature::{Feature, Value}};
+use geo_types::{MultiPolygon};
 
 pub fn init() {
     let map = Map::new();
@@ -28,6 +29,12 @@ pub struct Map {
     pub zoom: u32,
     pub lat: f32,
     pub lon: f32,
+}
+
+#[derive(Debug)]
+pub enum VisibleTileRenderPart {
+    Full,
+    Fraction(f32)
 }
 
 #[derive(Debug)]
@@ -177,13 +184,7 @@ impl Map {
     }
 
     fn render_visible_tiles(&self, visible_tiles: Vec<Tile>, center_tile_pos: &TileGridAccuratePos, window_size: &terminal::WindowSize) {
-//        println!("{:?}", tiles[6].features[8].geometry);
-//        for (p_key, p_val) in tiles[6].features[8].properties.as_ref().unwrap() {
-//            if !p_key.starts_with("name") {
-//                println!("{}: {:?}", p_key, p_val);
-//            }
-//        }
-        
+       
 //        let mut stdout = io::stdout();
 //        terminal::enable_raw_mode();
 //
@@ -197,38 +198,54 @@ impl Map {
 
         for visible_tile in visible_tiles {
             let Tile {pos, features} = visible_tile;
-            // # which part to show
+
             // top and left are negative | right and bottom are positive
             let relative_pos = TileGridRelativePos {
                 x: (pos.x as i32) - (non_acc_center_tile_pos.x as i32),
                 y: (pos.y as i32) - (non_acc_center_tile_pos.y as i32)
             };
-            if relative_pos.x == 0 && relative_pos.y == 0 {
-                // println!("center_tile which is full");
 
-            } else {
-                let center_paddings = utils::get_paddings(&relative_pos, center_tile_pos, PIXEL_SCALE);
-                // total space between the center and that tile(with direction)
-                let space_x = (relative_pos.x.unsigned_abs() * PIXEL_SCALE) as f32 + center_paddings.x;
-                let space_y = (relative_pos.y.unsigned_abs() * PIXEL_SCALE) as f32 + center_paddings.y;
+            // get x and y padding based on relative pos(left/right as x and top/bottom as y)
+            let center_paddings = utils::get_paddings(&relative_pos, center_tile_pos, PIXEL_SCALE);
 
-                // if negative, means fraction and if positive, means full
-                let diff_x = half_width - space_x;
-                let diff_y = half_height - space_y;
+            // total space between the center and that tile(with direction)
+            let space_x = (relative_pos.x.unsigned_abs() * PIXEL_SCALE) as f32 + center_paddings.x;
+            let space_y = (relative_pos.y.unsigned_abs() * PIXEL_SCALE) as f32 + center_paddings.y;
 
-                if diff_x >= 0.0 {
-                    // full x
-                } else {
-                    let fraction_x = diff_x + PIXEL_SCALE as f32;
+            // if negative, means fraction and if positive, means full
+            let diff_x = half_width - space_x;
+            let diff_y = half_height - space_y;
+
+            let tile_render_part_x = if diff_x >= 0.0 { VisibleTileRenderPart::Full } else { VisibleTileRenderPart::Fraction(diff_x + PIXEL_SCALE as f32) };
+            let tile_render_part_y = if diff_y >= 0.0 { VisibleTileRenderPart::Full } else { VisibleTileRenderPart::Fraction(diff_y + PIXEL_SCALE as f32) };
+
+            // properties not needed atm
+            // for (p_key, p_val) in features[features.len()-1].properties.as_ref().unwrap() {
+            //     if !p_key.starts_with("name") {
+            //         println!("{}: {:?}", p_key, p_val);
+            //     }
+            // }
+            // println!("{}", features.len());
+
+            let mut n = 0;
+            for feature in features {
+                // println!("{:?}", feature.geometry);
+                match feature.geometry {
+                    geo_types::Geometry::MultiPolygon(multi_polygon) => {
+                        for polygon in multi_polygon.iter() {
+                            // println!("{:?}", polygon.num_rings());
+                            if polygon.num_rings() > n {
+                                n = polygon.num_rings();
+                            }
+                        }
+                    },
+                    _ => ()
                 }
-
-                if diff_y >= 0.0 {
-                    // full y
-                } else {
-                    let fraction_y = diff_y + PIXEL_SCALE as f32;
-                }
+                // println!("--");
             }
-            // # where in the screen
+            println!("{n}");
+            // println!("{:?}", features[features.len()-1].geometry);
+            println!("----------------------------------------");
         }
 
 //        for y in 0..40 {

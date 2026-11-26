@@ -6,28 +6,26 @@ use std::io::Read;
 use crate::map::{TileGridPos, TileGridAccuratePos, TileGridRelativePos, Paddings};
 
 pub fn get_paddings(relative_pos: &TileGridRelativePos, center_tile_pos: &TileGridAccuratePos, pixel_scale:u32) -> Paddings {
-//    println!("{:?}", relative_pos);
-//    println!("{:?}", center_tile_pos);
-//    println!("{:?}", pixel_scale);
     let pixel_scale = pixel_scale as f32;
 
-    let mut paddings = Paddings {x: 0.0, y: 0.0};
-    if relative_pos.x < 0 {
-        // left
-        paddings.x = pixel_scale * (center_tile_pos.x - center_tile_pos.x.trunc());
-    } else {
-        // right
-        paddings.x = pixel_scale - (pixel_scale * (center_tile_pos.x - center_tile_pos.x.trunc()));
-    }
+    let mut paddings = Paddings {
+        x: if relative_pos.x < 0 {
+            // left
+            pixel_scale * (center_tile_pos.x - center_tile_pos.x.trunc())
+        } else {
+            // right
+            pixel_scale - (pixel_scale * (center_tile_pos.x - center_tile_pos.x.trunc()))
+        },
 
-    if relative_pos.y < 0 {
-        // top
-        paddings.y = pixel_scale * (center_tile_pos.y - center_tile_pos.y.trunc());
-    } else {
-        // bottom
-        paddings.y = pixel_scale - (pixel_scale * (center_tile_pos.y - center_tile_pos.y.trunc()));
-    }
-    // println!("{:?}", paddings);
+        y: if relative_pos.y < 0 {
+            // top
+            pixel_scale * (center_tile_pos.y - center_tile_pos.y.trunc())
+        } else {
+            // bottom
+            pixel_scale - (pixel_scale * (center_tile_pos.y - center_tile_pos.y.trunc()))
+        }
+    };
+
     paddings
 }
 

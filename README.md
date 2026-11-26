@@ -6,5 +6,6 @@ A terminal based, interactive map that fetches train open data and show them as 
     - [x] Setting up constants, do calculations to figure out which Vector tiles to fetch
     - [x] Fetch Vector tiles
     - [x] Read PBF file and parse Vector Tile
+    - [x] Calculate which part of tile to render
     - [ ] Turn each feature into ascii
     - [ ] Render

@@ -6,4 +6,5 @@ edition = "2024"
 [dependencies]
 crossterm = "0.29.0"
 downloader = "0.2.8"
+geo-types = "0.7.20"
 mvt-reader = "2.5.0"
