@@ -21,7 +21,7 @@ pub fn init() {
     let visible_tile_positions = map.get_visible_tile_positions(&center_tile_pos, &window_size);
     let dl_dir = map.download_visible_tile_files(&visible_tile_positions);
     let visible_tiles = map.read_visible_tile_files(dl_dir, visible_tile_positions);
-    map.render_tiles(visible_tiles, &center_tile_pos, &window_size);
+    map.render_visible_tiles(visible_tiles, &center_tile_pos, &window_size);
 }
 
 pub struct Map {
@@ -34,6 +34,18 @@ pub struct Map {
 struct Tile {
     pos: TileGridPos,
     features: Vec<Feature>
+}
+
+#[derive(Debug)]
+pub struct Paddings {
+    pub x: f32,
+    pub y: f32
+}
+
+#[derive(Debug)]
+pub struct TileGridRelativePos {
+    pub x: i32,
+    pub y: i32
 }
 
 #[derive(Debug, PartialEq)]
@@ -164,7 +176,7 @@ impl Map {
         visible_tiles
     }
 
-    fn render_tiles(&self, visible_tiles: Vec<Tile>, center_tile_pos: &TileGridAccuratePos, window_size: &terminal::WindowSize) {
+    fn render_visible_tiles(&self, visible_tiles: Vec<Tile>, center_tile_pos: &TileGridAccuratePos, window_size: &terminal::WindowSize) {
 //        println!("{:?}", tiles[6].features[8].geometry);
 //        for (p_key, p_val) in tiles[6].features[8].properties.as_ref().unwrap() {
 //            if !p_key.starts_with("name") {
@@ -176,11 +188,31 @@ impl Map {
 //        terminal::enable_raw_mode();
 //
 //        stdout.queue(terminal::Clear(terminal::ClearType::All)).unwrap();
-
-//        let p_left = 
+        let non_acc_center_tile_pos = TileGridPos {
+            x: center_tile_pos.x as u32,
+            y: center_tile_pos.y as u32
+        };
         for visible_tile in visible_tiles {
             let Tile {pos, features} = visible_tile;
-            // which part to show
+            // # which part to show
+            // println!("{:?}", pos);
+
+            // top and left are negative | right and bottom are positive
+            let relative_pos = TileGridRelativePos {
+                x: (pos.x as i32) - (non_acc_center_tile_pos.x as i32),
+                y: (pos.y as i32) - (non_acc_center_tile_pos.y as i32)
+            };
+            // println!("{:?}", relative_pos);
+            if relative_pos.x == 0 && relative_pos.y == 0 {
+                // println!("center_tile which is full");
+            } else {
+                let paddings = utils::get_paddings(&relative_pos, center_tile_pos, PIXEL_SCALE);
+                // total space between the center and that tile(with direction)
+                let space_x = (relative_pos.x.unsigned_abs() * PIXEL_SCALE) as f32 + paddings.x;
+                let space_y = (relative_pos.y.unsigned_abs() * PIXEL_SCALE) as f32 + paddings.y;
+                println!("{:?}", space_x);
+            }
+
             // where in the screen
         }
 
