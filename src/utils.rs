@@ -58,14 +58,18 @@ pub fn read_file(mut buf: &mut Vec<u8>, file_path: &PathBuf) {
     file.read_to_end(&mut buf);
 } 
 
+pub fn deg_to_rad(deg: f32) -> f32 {
+    (deg * PI)/180.0
+}
+
 pub fn ll_to_tile_pos(lon: f32, lat: f32, zoom: u32) -> TileGridAccuratePos {
     // https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
+    let lat_rad = deg_to_rad(lat);
     let n = 2_i32.pow(zoom) as f32; // n*n is number of tiles
     let x_tile = n * ((lon + 180.0) / 360.0);
-    let y_tile = n * (1.0 - ((lat.tan() + (1.0/lat.cos())).ln() / PI)) / 2.0;
+    let y_tile = n * (1.0 - ((lat_rad.tan() + (1.0/lat_rad.cos())).ln() / PI)) / 2.0;
     TileGridAccuratePos {
         x: x_tile,
         y: y_tile
     }
 }
-
