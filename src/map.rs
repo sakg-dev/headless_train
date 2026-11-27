@@ -197,6 +197,7 @@ impl Map {
         let half_width = (window_size.width / 2) as f32;
         let half_height = (window_size.height / 2) as f32;
 
+        let visible_tiles = vec!(&visible_tiles[0]); // TEMP
         for visible_tile in visible_tiles {
             let Tile {pos, features} = visible_tile;
 
@@ -234,10 +235,12 @@ impl Map {
              * "extent" in mvt: it means the internal coordinate system of the tile in which its
              * x and y divides itself in 4096 chunks, top left is 0,0 and bottom right is 4096, 4096
              */
-            let mut big_start  = Coord::zero();
-            let mut big_end    = Coord::zero();
-            let mut smol_start = Coord::zero();
-            let mut smol_end   = Coord::zero();
+            // let render_buffer = vec!();
+            let features = vec!(<Feature as Clone>::clone(&features[0]), <Feature as Clone>::clone(&features[1])); // TEMP
+            let extent_to_pixel_ratio = PIXEL_SCALE as f32 / 4096.0;
+            let col_to_pixel_ratio:f32 = window_size.columns as f32/window_size.width as f32;
+            let row_to_pixel_ratio = window_size.rows as f32/window_size.height as f32;
+            // println!("{:?}, {:?}", col_to_pixel_ratio, row_to_pixel_ratio);
             for feature in features {
                 // println!("{:?}", feature.geometry);
                 match feature.geometry {
@@ -251,26 +254,41 @@ impl Map {
                                 continue // TODO: handle it later
                             }
                             // println!("{:?}", exterior_ring);
+                            // let render_buf = vec!();
                             for line in exterior_ring.lines() {
                                 let Line {start, end} = line;
+                                if ((start.x < 0.0) | (end.x > 4096.0)) | ((start.y < 0.0) | (end.y > 4096.0)) {
+                                    continue // TODO: handle buffer thing later
+                                }
+                                // 4096/256 = 16 units/pixel
+                                // in one polygon the start of a line is end of prev and the start
+                                // of first line will be end of last line forming a closed loop
+                                let start_x_pixel = start.x*extent_to_pixel_ratio; 
+                                let start_y_pixel = start.y*extent_to_pixel_ratio;
+                                let end_x_pixel = end.x*extent_to_pixel_ratio; 
+                                let end_y_pixel = end.y*extent_to_pixel_ratio;
 
-                                if start.x < smol_start.x && start.y < smol_start.y {smol_start = start}
-                                if end.x < smol_end.x && end.y < smol_end.y {smol_end = end}
+                                let start_x_col = (start_x_pixel*col_to_pixel_ratio) as u32;
+                                let start_y_row = (start_y_pixel*row_to_pixel_ratio) as u32;
+                                let end_x_col = (end_x_pixel*col_to_pixel_ratio) as u32;
+                                let end_y_row = (end_y_pixel*row_to_pixel_ratio) as u32;
+                                // println!("{}, {}", start_x_col, start_y_row);
+                                // println!("{}, {}", end_x_col, end_y_row);
 
-                                if start.x >big_start.x && start.y > big_start.y {big_start = start}
-                                if end.x > big_end.x && end.y > big_end.y {big_end = end}
-                               // println!("{:?}, {:?}", start, end);
+
+                                println!("--");
                             }
                         }
                     },
                     _ => panic!("aaa we cant handle it")
                 }
+                println!("------------------------------");
             }
+            // 4160 - max, -64 - min
             // 4160 - 64 = 4096, (-64) + 64 = 0; <--- is it that buffer thingy?
-            // println!("{:?}, {:?}", big_start, big_end); // sm values exciding 4096 = 4160
-            // println!("{:?}, {:?}", smol_start, smol_end); // sm values are negative = -64
+
             // println!("{:?}", features[features.len()-1].geometry);
-            println!("----------------------------------------");
+            // println!("----------------------------------------");
         }
 
 //        for y in 0..40 {
