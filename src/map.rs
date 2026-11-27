@@ -186,10 +186,10 @@ impl Map {
 
     fn render_visible_tiles(&self, visible_tiles: Vec<Tile>, center_tile_pos: &TileGridAccuratePos, window_size: &terminal::WindowSize) {
        
-//        let mut stdout = io::stdout();
-//        terminal::enable_raw_mode();
-//
-//        stdout.queue(terminal::Clear(terminal::ClearType::All)).unwrap();
+        let mut stdout = io::stdout();
+        terminal::enable_raw_mode();
+        stdout.queue(terminal::Clear(terminal::ClearType::All)).unwrap();
+
         let non_acc_center_tile_pos = TileGridPos {
             x: center_tile_pos.x as u32,
             y: center_tile_pos.y as u32
@@ -197,7 +197,7 @@ impl Map {
         let half_width = (window_size.width / 2) as f32;
         let half_height = (window_size.height / 2) as f32;
 
-        let visible_tiles = vec!(&visible_tiles[0]); // TEMP
+        let visible_tiles = vec!(&visible_tiles[1]); // TEMP
         for visible_tile in visible_tiles {
             let Tile {pos, features} = visible_tile;
 
@@ -220,6 +220,10 @@ impl Map {
 
             let tile_render_part_x = if diff_x >= 0.0 { VisibleTileRenderPart::Full } else { VisibleTileRenderPart::Fraction(diff_x + PIXEL_SCALE as f32) };
             let tile_render_part_y = if diff_y >= 0.0 { VisibleTileRenderPart::Full } else { VisibleTileRenderPart::Fraction(diff_y + PIXEL_SCALE as f32) };
+
+            // get top left position of the tile in row and col
+            let left_pos = (diff_x*(window_size.columns as f32/window_size.width as f32)) as u32;
+            let top_pos = (diff_y*(window_size.rows as f32/window_size.height as f32)) as u32;
 
             // properties not needed atm
             // for (p_key, p_val) in features[features.len()-1].properties.as_ref().unwrap() {
@@ -267,6 +271,8 @@ impl Map {
                                 let start_y_pixel = start.y*extent_to_pixel_ratio;
                                 let end_x_pixel = end.x*extent_to_pixel_ratio; 
                                 let end_y_pixel = end.y*extent_to_pixel_ratio;
+                                // 4160 - max, -64 - min
+                                // 4160 - 64 = 4096, (-64) + 64 = 0; <--- is it that buffer thingy?
 
                                 let start_x_col = (start_x_pixel*col_to_pixel_ratio) as u32;
                                 let start_y_row = (start_y_pixel*row_to_pixel_ratio) as u32;
@@ -274,36 +280,27 @@ impl Map {
                                 let end_y_row = (end_y_pixel*row_to_pixel_ratio) as u32;
                                 // println!("{}, {}", start_x_col, start_y_row);
                                 // println!("{}, {}", end_x_col, end_y_row);
+                                let x = left_pos + start_x_col;
+                                let y = top_pos  + start_y_row;
 
-
-                                println!("--");
+                                // println!("{:?}", tile_render_part_x);
+                                // println!("{:?}", tile_render_part_y);
+                                stdout
+                                    .queue(cursor::MoveTo(x as u16, y as u16)).unwrap()
+                                    .queue(style::Print("⠒")).unwrap();
+                                // println!("--");
                             }
                         }
                     },
-                    _ => panic!("aaa we cant handle it")
+                    _ => panic!("we can't handle it")
                 }
-                println!("------------------------------");
+                // println!("------------------------------------------------");
             }
-            // 4160 - max, -64 - min
-            // 4160 - 64 = 4096, (-64) + 64 = 0; <--- is it that buffer thingy?
-
-            // println!("{:?}", features[features.len()-1].geometry);
-            // println!("----------------------------------------");
         }
 
-//        for y in 0..40 {
-//            for x in 0..150 {
-//                if (y == 0 || y == 40 - 1) || (x == 0 || x == 150 - 1) {
-//                    stdout
-//                      .queue(cursor::MoveTo(x,y)).unwrap()
-//                      .queue(style::PrintStyledContent("#".blue())).unwrap();
-//                }
-//            }
-//        }
-
-//        stdout.flush().unwrap();
-//        thread::sleep(time::Duration::from_secs(10));
-//        terminal::disable_raw_mode();
+        stdout.flush().unwrap();
+        thread::sleep(time::Duration::from_secs(2));
+        terminal::disable_raw_mode();
     }
 }
 
