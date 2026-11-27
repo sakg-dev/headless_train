@@ -41,7 +41,7 @@ pub fn create_and_get_dl_dir(zoom:u32) -> PathBuf {
     //     fs::remove_dir_all(&dl_dir);
     // }
 
-    if (!fs::exists(&dl_dir).unwrap()) {
+    if !fs::exists(&dl_dir).unwrap() {
         fs::create_dir_all(&dl_dir);
     }
 
@@ -92,6 +92,7 @@ pub fn ll_to_tile_pos(lon: f32, lat: f32, zoom: u32) -> TileGridAccuratePos {
     let n = 2_i32.pow(zoom) as f32; // n*n is number of tiles
     let x_tile = n * ((lon + 180.0) / 360.0);
     let y_tile = n * (1.0 - ((lat_rad.tan() + (1.0/lat_rad.cos())).ln() / PI)) / 2.0;
+
     TileGridAccuratePos {
         x: x_tile,
         y: y_tile

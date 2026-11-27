@@ -13,7 +13,7 @@ use std::{
     thread,
 };
 use mvt_reader::{Reader, error::{ParserError}, feature::{Feature, Value}};
-use geo_types::{MultiPolygon};
+use geo_types::{MultiPolygon, geometry::{Line, Coord}};
 
 pub fn init() {
     let map = Map::new();
@@ -169,6 +169,7 @@ impl Map {
 
             if let Some(idx) = administrative_idx {
                 // println!("{:?}", reader.get_layer_metadata().unwrap());
+                // println!("{:?}", reader.get_layer_metadata().unwrap()[0].extent); // 4096
                 let pos = utils::get_pos_from_file_path(&visible_tile_file);
                 let features = reader.get_features(idx).unwrap();
                 let visible_tile = Tile {
@@ -227,23 +228,47 @@ impl Map {
             // }
             // println!("{}", features.len());
 
-            let mut n = 0;
+            /* Things:
+             * "extent" in TileJSON: smwhat like bound, in epsg:3857(meter), tells us total area it covers: 
+             *                          [min_x, min_y, max_x, max_y]
+             * "extent" in mvt: it means the internal coordinate system of the tile in which its
+             * x and y divides itself in 4096 chunks, top left is 0,0 and bottom right is 4096, 4096
+             */
+            let mut big_start  = Coord::zero();
+            let mut big_end    = Coord::zero();
+            let mut smol_start = Coord::zero();
+            let mut smol_end   = Coord::zero();
             for feature in features {
                 // println!("{:?}", feature.geometry);
                 match feature.geometry {
                     geo_types::Geometry::MultiPolygon(multi_polygon) => {
                         for polygon in multi_polygon.iter() {
                             // println!("{:?}", polygon.num_rings());
-                            if polygon.num_rings() > n {
-                                n = polygon.num_rings();
+                            let rings = polygon.clone().into_inner();
+                            let exterior_ring = rings.0;
+                            let interior_rings = rings.1;
+                            if interior_rings.len() > 0 {
+                                continue // TODO: handle it later
+                            }
+                            // println!("{:?}", exterior_ring);
+                            for line in exterior_ring.lines() {
+                                let Line {start, end} = line;
+
+                                if start.x < smol_start.x && start.y < smol_start.y {smol_start = start}
+                                if end.x < smol_end.x && end.y < smol_end.y {smol_end = end}
+
+                                if start.x >big_start.x && start.y > big_start.y {big_start = start}
+                                if end.x > big_end.x && end.y > big_end.y {big_end = end}
+                               // println!("{:?}, {:?}", start, end);
                             }
                         }
                     },
-                    _ => ()
+                    _ => panic!("aaa we cant handle it")
                 }
-                // println!("--");
             }
-            println!("{n}");
+            // 4160 - 64 = 4096, (-64) + 64 = 0; <--- is it that buffer thingy?
+            // println!("{:?}, {:?}", big_start, big_end); // sm values exciding 4096 = 4160
+            // println!("{:?}, {:?}", smol_start, smol_end); // sm values are negative = -64
             // println!("{:?}", features[features.len()-1].geometry);
             println!("----------------------------------------");
         }
