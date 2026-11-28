@@ -4,7 +4,7 @@ use crossterm::{
     ExecutableCommand, QueueableCommand,
     terminal, cursor, style::{self, Stylize}
 };
-use downloader::{Download, downloader::Builder};
+use downloader::{Download, downloader::Builder, Error as Dl_Error};
 use std::{
     time::{self, Duration},
     io::{self, Write},
@@ -138,15 +138,23 @@ impl Map {
         }
 
         let dl_dir = utils::create_and_get_dl_dir(self.zoom);
-        // TODO: check when dir exists, why is it faster, is it bcz the same file is already there?
         let mut dl = Builder::default()
             .connect_timeout(Duration::from_secs(DOWNLOAD_TIMEOUT))
             .download_folder(&dl_dir)
             .parallel_requests(PARALLEL_DOWNLOAD_LIMIT)
             .build().unwrap();
 
-        let _ = dl.download(&visible_tile_files);
-        // TODO: later check status of individual files and if fails, try doing again for n times
+        let file_responses = dl.download(&visible_tile_files).unwrap();
+        for file_res in file_responses {
+            match file_res {
+                Ok(_) => (),
+                Err(e) => match e {
+                    Dl_Error::Download(d_s) => eprintln!("!Alert: The tile file already exists: {}", d_s.file_name.into_string().unwrap()),
+                    _ => panic!("Unable to download the tile file")
+                }
+            }
+        }
+
         dl_dir
     }
 
