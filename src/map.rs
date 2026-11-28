@@ -69,7 +69,7 @@ pub struct TileGridAccuratePos { // Tile Grid Pos accurately -- with fraction
 
 impl Map {
     // We are supporting only base zooms not fractional zooms
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             zoom: INITIAL_ZOOM,
             lat: INITIAL_LAT,
@@ -82,8 +82,7 @@ impl Map {
     }
 
     // based on center tile position and window size, finding out visible tiles
-    fn get_visible_tile_positions(&self, center_tile_pos: &TileGridAccuratePos, window_size: &terminal::WindowSize) -> Vec<TileGridPos> {
-        // TODO: Its panicking at lower zoom: 
+    pub fn get_visible_tile_positions(&self, center_tile_pos: &TileGridAccuratePos, window_size: &terminal::WindowSize) -> Vec<TileGridPos> {
 
         let pixel_scale = PIXEL_SCALE as f32;
         let half_window_width  = (window_size.width / 2) as f32;
@@ -153,6 +152,8 @@ impl Map {
 
     // reads all tile files in zoom dir, filter current tiles and output position and features of each
     fn read_visible_tile_files(&self, dl_dir: PathBuf, visible_tile_positions: Vec<TileGridPos>) -> Vec<Tile> {
+        // TODO: Its panicking at lower zoom (< 3)
+
         let all_tile_files = utils::files_in_dir(dl_dir).unwrap();
         // there might be tiles from prev download, bt we need current only
         let visible_tile_files = utils::filter_visible_tile_files(all_tile_files, visible_tile_positions); 
@@ -186,9 +187,9 @@ impl Map {
 
     fn render_visible_tiles(&self, visible_tiles: Vec<Tile>, center_tile_pos: &TileGridAccuratePos, window_size: &terminal::WindowSize) {
        
-        let mut stdout = io::stdout();
-        terminal::enable_raw_mode();
-        stdout.queue(terminal::Clear(terminal::ClearType::All)).unwrap();
+        // let mut stdout = io::stdout();
+        // terminal::enable_raw_mode();
+        // stdout.queue(terminal::Clear(terminal::ClearType::All)).unwrap();
 
         let non_acc_center_tile_pos = TileGridPos {
             x: center_tile_pos.x as u32,
@@ -285,9 +286,9 @@ impl Map {
 
                                 // println!("{:?}", tile_render_part_x);
                                 // println!("{:?}", tile_render_part_y);
-                                stdout
-                                    .queue(cursor::MoveTo(x as u16, y as u16)).unwrap()
-                                    .queue(style::Print("⠒")).unwrap();
+                                // stdout
+                                //     .queue(cursor::MoveTo(x as u16, y as u16)).unwrap()
+                                //     .queue(style::Print("⠒")).unwrap();
                                 // println!("--");
                             }
                         }
@@ -298,9 +299,9 @@ impl Map {
             }
         }
 
-        stdout.flush().unwrap();
-        thread::sleep(time::Duration::from_secs(2));
-        terminal::disable_raw_mode();
+        // stdout.flush().unwrap();
+        // thread::sleep(time::Duration::from_secs(2));
+        // terminal::disable_raw_mode();
     }
 }
 
