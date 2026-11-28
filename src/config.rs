@@ -1,9 +1,9 @@
-pub const INITIAL_LON:f32 = 1.0;
-pub const INITIAL_LAT:f32 = -2.0;
+pub const INITIAL_LON:f32 = 23.469359;
+pub const INITIAL_LAT:f32 = 78.399417;
 pub const INITIAL_ZOOM:u32 = 3;
 pub const PIXEL_SCALE :u32 = 256;
-pub const MIN_ZOOM:u32 = 0;
-pub const MAX_ZOOM:u32 = 11;
+pub const _MIN_ZOOM:u32 = 0;
+pub const _MAX_ZOOM:u32 = 11;
 
 pub const SOURCE:&str = "https://api.maptiler.com";
 pub const PARALLEL_DOWNLOAD_LIMIT:u16 = 10;

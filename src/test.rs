@@ -121,3 +121,4 @@ fn get_visible_tile_positions() {
         assert!(test_visible_tile_positions==visible_tile_positions);
     }
 }
+

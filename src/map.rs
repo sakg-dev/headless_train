@@ -1,28 +1,31 @@
 use crate::config::*;
 use crate::utils;
 use crossterm::{
-    ExecutableCommand, QueueableCommand,
-    terminal, cursor, style::{self, Stylize}
+    terminal
 };
 use downloader::{Download, downloader::Builder, Error as Dl_Error};
 use std::{
-    time::{self, Duration},
-    io::{self, Write},
     path::{Path, PathBuf},
-    env,
-    thread,
+    time::Duration,
+    env
 };
-use mvt_reader::{Reader, error::{ParserError}, feature::{Feature, Value}};
-use geo_types::{MultiPolygon, geometry::{Line, Coord}};
+use mvt_reader::{Reader, feature::{Feature}};
+use geo_types::{geometry::{Line}};
 
 pub fn init() {
-    let map = Map::new();
+    // TODO: Rn working for specific lon/lat, but once it works, try with other
+
     let window_size = terminal::window_size().unwrap();
+
+    let map = Map::new();
     let center_tile_pos = map.get_center_tile_pos();
     let visible_tile_positions = map.get_visible_tile_positions(&center_tile_pos, &window_size);
     let dl_dir = map.download_visible_tile_files(&visible_tile_positions);
     let visible_tiles = map.read_visible_tile_files(dl_dir, visible_tile_positions);
-    map.render_visible_tiles(visible_tiles, &center_tile_pos, &window_size);
+
+    let terminal::WindowSize {height, width, rows, columns} = window_size;
+    let renderer = Renderer::new(height, width, rows, columns);
+    renderer.render_visible_tiles(visible_tiles, &center_tile_pos);
 }
 
 pub struct Map {
@@ -31,11 +34,11 @@ pub struct Map {
     pub lon: f32,
 }
 
-#[derive(Debug)]
-pub enum VisibleTileRenderPart {
-    Full,
-    Fraction(f32)
-}
+// #[derive(Debug)]
+// pub enum VisibleTileRenderPart {
+//     Full,
+//     Fraction(f32)
+// }
 
 #[derive(Debug)]
 struct Tile {
@@ -174,11 +177,9 @@ impl Map {
             let reader = Reader::new(buf).unwrap();
             let layer_names = reader.get_layer_names().unwrap();
 
-            let administrative_idx = layer_names.iter().position(|l| l.as_str()=="administrative");
+            let administrative_idx = layer_names.iter().position(|l| l.as_str() == "administrative");
 
             if let Some(idx) = administrative_idx {
-                // println!("{:?}", reader.get_layer_metadata().unwrap());
-                // println!("{:?}", reader.get_layer_metadata().unwrap()[0].extent); // 4096
                 let pos = utils::get_pos_from_file_path(&visible_tile_file);
                 let features = reader.get_features(idx).unwrap();
                 let visible_tile = Tile {
@@ -187,14 +188,60 @@ impl Map {
                 };
                 visible_tiles.push(visible_tile);
             } else {
-                // TODO: todo!("Administrative layer doesn't exist in file: {}", file.into_string().unwrap());
+                panic!("Administrative layer doesn't exist in file: {}", visible_tile_file.into_string().unwrap());
             }
         }
         visible_tiles
     }
+}
 
-    fn render_visible_tiles(&self, visible_tiles: Vec<Tile>, center_tile_pos: &TileGridAccuratePos, window_size: &terminal::WindowSize) {
-       
+struct Renderer {
+    height : u16,
+    width  : u16,
+    rows   : u16,
+    cols   : u16
+}
+
+impl Renderer {
+    fn new(height: u16, width: u16, rows: u16, cols: u16) -> Self {
+        Renderer {
+            height : height,
+            width  : width,
+            rows   : rows,
+            cols   : cols 
+        }
+    }
+
+    fn calculate_stuff_on_each_visible_tile(&self, visible_tile_pos: &TileGridPos, non_acc_center_tile_pos: &TileGridPos, center_tile_pos: &TileGridAccuratePos, half_width: f32, half_height: f32) -> (u32, u32) {
+
+        // top and left are negative | right and bottom are positive
+        let relative_pos = TileGridRelativePos {
+            x: (visible_tile_pos.x as i32) - (non_acc_center_tile_pos.x as i32),
+            y: (visible_tile_pos.y as i32) - (non_acc_center_tile_pos.y as i32)
+        };
+
+        // get x and y padding based on relative pos(left/right as x and top/bottom as y)
+        let center_paddings = utils::get_paddings(&relative_pos, center_tile_pos, PIXEL_SCALE);
+
+        // total space between the center and that tile(with direction)
+        let space_x = (relative_pos.x.unsigned_abs() * PIXEL_SCALE) as f32 + center_paddings.x;
+        let space_y = (relative_pos.y.unsigned_abs() * PIXEL_SCALE) as f32 + center_paddings.y;
+
+        // if negative, means fraction and if positive, means full
+        let diff_x = half_width - space_x;
+        let diff_y = half_height - space_y;
+
+        // let tile_render_part_x = if diff_x >= 0.0 { VisibleTileRenderPart::Full } else { VisibleTileRenderPart::Fraction(diff_x + PIXEL_SCALE as f32) };
+        // let tile_render_part_y = if diff_y >= 0.0 { VisibleTileRenderPart::Full } else { VisibleTileRenderPart::Fraction(diff_y + PIXEL_SCALE as f32) };
+
+        // get top left position of the tile in row and col
+        let left_pos = (diff_x*(self.cols as f32/self.width as f32)) as u32;
+        let top_pos = (diff_y*(self.rows as f32/self.height as f32)) as u32;
+
+        return (left_pos, top_pos)
+    }
+
+    fn render_visible_tiles(&self, visible_tiles: Vec<Tile>, center_tile_pos: &TileGridAccuratePos) {
         // let mut stdout = io::stdout();
         // terminal::enable_raw_mode();
         // stdout.queue(terminal::Clear(terminal::ClearType::All)).unwrap();
@@ -203,44 +250,13 @@ impl Map {
             x: center_tile_pos.x as u32,
             y: center_tile_pos.y as u32
         };
-        let half_width = (window_size.width / 2) as f32;
-        let half_height = (window_size.height / 2) as f32;
+        let half_width = (self.width / 2) as f32;
+        let half_height = (self.height / 2) as f32;
 
-        let visible_tiles = vec!(&visible_tiles[1]); // TEMP
+        // let visible_tiles = vec!(&visible_tiles[1]); // TEMP
         for visible_tile in visible_tiles {
             let Tile {pos, features} = visible_tile;
-
-            // top and left are negative | right and bottom are positive
-            let relative_pos = TileGridRelativePos {
-                x: (pos.x as i32) - (non_acc_center_tile_pos.x as i32),
-                y: (pos.y as i32) - (non_acc_center_tile_pos.y as i32)
-            };
-
-            // get x and y padding based on relative pos(left/right as x and top/bottom as y)
-            let center_paddings = utils::get_paddings(&relative_pos, center_tile_pos, PIXEL_SCALE);
-
-            // total space between the center and that tile(with direction)
-            let space_x = (relative_pos.x.unsigned_abs() * PIXEL_SCALE) as f32 + center_paddings.x;
-            let space_y = (relative_pos.y.unsigned_abs() * PIXEL_SCALE) as f32 + center_paddings.y;
-
-            // if negative, means fraction and if positive, means full
-            let diff_x = half_width - space_x;
-            let diff_y = half_height - space_y;
-
-            let tile_render_part_x = if diff_x >= 0.0 { VisibleTileRenderPart::Full } else { VisibleTileRenderPart::Fraction(diff_x + PIXEL_SCALE as f32) };
-            let tile_render_part_y = if diff_y >= 0.0 { VisibleTileRenderPart::Full } else { VisibleTileRenderPart::Fraction(diff_y + PIXEL_SCALE as f32) };
-
-            // get top left position of the tile in row and col
-            let left_pos = (diff_x*(window_size.columns as f32/window_size.width as f32)) as u32;
-            let top_pos = (diff_y*(window_size.rows as f32/window_size.height as f32)) as u32;
-
-            // properties not needed atm
-            // for (p_key, p_val) in features[features.len()-1].properties.as_ref().unwrap() {
-            //     if !p_key.starts_with("name") {
-            //         println!("{}: {:?}", p_key, p_val);
-            //     }
-            // }
-            // println!("{}", features.len());
+            let (_left_pos, _top_pos) = self.calculate_stuff_on_each_visible_tile(&pos, &non_acc_center_tile_pos, &center_tile_pos, half_width, half_height);
 
             /* Things:
              * "extent" in TileJSON: smwhat like bound, in epsg:3857(meter), tells us total area it covers: 
@@ -248,14 +264,12 @@ impl Map {
              * "extent" in mvt: it means the internal coordinate system of the tile in which its
              * x and y divides itself in 4096 chunks, top left is 0,0 and bottom right is 4096, 4096
              */
-            // let render_buffer = vec!();
-            let features = vec!(<Feature as Clone>::clone(&features[0]), <Feature as Clone>::clone(&features[1])); // TEMP
-            let extent_to_pixel_ratio = PIXEL_SCALE as f32 / 4096.0;
-            let col_to_pixel_ratio:f32 = window_size.columns as f32/window_size.width as f32;
-            let row_to_pixel_ratio = window_size.rows as f32/window_size.height as f32;
-            // println!("{:?}, {:?}", col_to_pixel_ratio, row_to_pixel_ratio);
+            // let extent_to_pixel_ratio = PIXEL_SCALE as f32 / 4096.0;
+            // let col_to_pixel_ratio:f32 = self.cols as f32/self.width as f32;
+            // let row_to_pixel_ratio = self.rows as f32/self.height as f32;
+
+            // let features = vec!(<Feature as Clone>::clone(&features[0]), <Feature as Clone>::clone(&features[1])); // TEMP
             for feature in features {
-                // println!("{:?}", feature.geometry);
                 match feature.geometry {
                     geo_types::Geometry::MultiPolygon(multi_polygon) => {
                         for polygon in multi_polygon.iter() {
@@ -276,24 +290,20 @@ impl Map {
                                 // 4096/256 = 16 units/pixel
                                 // in one polygon the start of a line is end of prev and the start
                                 // of first line will be end of last line forming a closed loop
-                                let start_x_pixel = start.x*extent_to_pixel_ratio; 
-                                let start_y_pixel = start.y*extent_to_pixel_ratio;
-                                let end_x_pixel = end.x*extent_to_pixel_ratio; 
-                                let end_y_pixel = end.y*extent_to_pixel_ratio;
+                                // let start_x_pixel = start.x*extent_to_pixel_ratio; 
+                                // let start_y_pixel = start.y*extent_to_pixel_ratio;
+                                // let end_x_pixel = end.x*extent_to_pixel_ratio; 
+                                // let end_y_pixel = end.y*extent_to_pixel_ratio;
                                 // 4160 - max, -64 - min
                                 // 4160 - 64 = 4096, (-64) + 64 = 0; <--- is it that buffer thingy?
 
-                                let start_x_col = (start_x_pixel*col_to_pixel_ratio) as u32;
-                                let start_y_row = (start_y_pixel*row_to_pixel_ratio) as u32;
-                                let end_x_col = (end_x_pixel*col_to_pixel_ratio) as u32;
-                                let end_y_row = (end_y_pixel*row_to_pixel_ratio) as u32;
-                                // println!("{}, {}", start_x_col, start_y_row);
-                                // println!("{}, {}", end_x_col, end_y_row);
-                                let x = left_pos + start_x_col;
-                                let y = top_pos  + start_y_row;
+                                // let start_x_col = (start_x_pixel*col_to_pixel_ratio) as u32;
+                                // let start_y_row = (start_y_pixel*row_to_pixel_ratio) as u32;
+                                // let end_x_col = (end_x_pixel*col_to_pixel_ratio) as u32;
+                                // let end_y_row = (end_y_pixel*row_to_pixel_ratio) as u32;
+                                // let x = left_pos + start_x_col;
+                                // let y = top_pos  + start_y_row;
 
-                                // println!("{:?}", tile_render_part_x);
-                                // println!("{:?}", tile_render_part_y);
                                 // stdout
                                 //     .queue(cursor::MoveTo(x as u16, y as u16)).unwrap()
                                 //     .queue(style::Print("⠒")).unwrap();
@@ -312,4 +322,3 @@ impl Map {
         // terminal::disable_raw_mode();
     }
 }
-

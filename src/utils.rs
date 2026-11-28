@@ -8,7 +8,7 @@ use crate::map::{TileGridPos, TileGridAccuratePos, TileGridRelativePos, Paddings
 pub fn get_paddings(relative_pos: &TileGridRelativePos, center_tile_pos: &TileGridAccuratePos, pixel_scale:u32) -> Paddings {
     let pixel_scale = pixel_scale as f32;
 
-    let mut paddings = Paddings {
+    let paddings = Paddings {
         x: if relative_pos.x < 0 {
             // left
             pixel_scale * (center_tile_pos.x - center_tile_pos.x.trunc())
@@ -42,7 +42,7 @@ pub fn create_and_get_dl_dir(zoom:u32) -> PathBuf {
     // }
 
     if !fs::exists(&dl_dir).unwrap() {
-        fs::create_dir_all(&dl_dir);
+        fs::create_dir_all(&dl_dir).unwrap();
     }
 
     dl_dir
@@ -79,7 +79,7 @@ pub fn files_in_dir(dir: PathBuf) -> Option<Vec<PathBuf>> {
 
 pub fn read_file(mut buf: &mut Vec<u8>, file_path: &PathBuf) {
     let mut file = fs::File::open(file_path).unwrap();
-    file.read_to_end(&mut buf);
+    file.read_to_end(&mut buf).unwrap();
 } 
 
 pub fn deg_to_rad(deg: f32) -> f32 {

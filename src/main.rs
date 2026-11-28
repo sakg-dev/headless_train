@@ -5,6 +5,6 @@ mod map;
 mod test;
 
 fn main() {
-    let map = map::init();
+    map::init();
 }
 
